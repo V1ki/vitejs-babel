@@ -1,6 +1,6 @@
 import {NodePath, PluginObj, PluginPass} from "@babel/core";
 import {
-    CallExpression,
+    CallExpression, ExportDefaultDeclaration,
     Identifier,
     ImportDeclaration, isArrayPattern, isCallExpression, isIdentifier,
     isImportDefaultSpecifier,
@@ -128,7 +128,15 @@ export default function testPluginFunction(): PluginObj {
                 console.log(filename, line)
 
             },
-
+            ExportDefaultDeclaration(path:NodePath<ExportDefaultDeclaration>, state:PluginPass){
+                console.log(path,state)
+                const filename = state.filename?.replace(state.cwd + "/", "");
+                let line = "export default " ;
+                if(isIdentifier(path.node.declaration)) {
+                    line += path.node.declaration.name ;
+                }
+                console.log(filename,getPosition(path.node.loc), line)
+            },
         },
     };
 }
