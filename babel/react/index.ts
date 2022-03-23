@@ -1,11 +1,23 @@
 import {NodePath, PluginObj, PluginPass} from "@babel/core";
 import {
+    CallExpression,
     Identifier,
     ImportDeclaration, isArrayPattern, isCallExpression, isIdentifier,
     isImportDefaultSpecifier,
-    isImportSpecifier, isNumericLiteral, isStringLiteral,
+    isImportSpecifier, isNumericLiteral, isStringLiteral, SourceLocation,
     VariableDeclaration
 } from "@babel/types";
+
+const getPosition: (loc: SourceLocation | null ) => String = (loc) => {
+    let pos = "" ;
+    if(loc){
+        pos += loc.start.line ;
+        pos += ":"
+        pos += ("["+loc.start.column+","+loc.end.column+"]")
+    }
+    return pos ;
+}
+
 
 export default function testPluginFunction(): PluginObj {
     return {
@@ -36,25 +48,15 @@ export default function testPluginFunction(): PluginObj {
                 if (defaultSpecifiers.length > 0 || otherSpecifiers.length > 0) {
                     str += " from ";
                 }
-
                 str += ("'" + node.source.value + "'");
 
-                let pos = "" ;
-                if(node.loc){
-                    pos += node.loc.start.line ;
-                    pos += ":"
-                    pos += ("["+node.loc.start.column+","+node.loc.end.column+"]")
-                }
-
-
-                console.log(filename, pos, str);
+                console.log(filename, getPosition(node.loc), str);
                 // console.log('ImportDeclaration Entered!', path.node);
                 // console.log("node.specifiers: ",node.specifiers )
                 // console.log("source: ",node.source.value)
 
             },
             VariableDeclaration(path: NodePath<VariableDeclaration>, state: PluginPass) {
-                console.log('VariableDeclaration Entered!', path);
                 const declarations = path.node.declarations;
                 const filename = state.filename?.replace(state.cwd + "/", "");
                 declarations.forEach(d => {
@@ -79,28 +81,54 @@ export default function testPluginFunction(): PluginObj {
                                 line += d.init.callee.name ;
                             }
                             line += "(" ;
-                            d.init.arguments.forEach(arg=>{
-                               if(isNumericLiteral(arg)) {
-                                   line += arg.value ;
-                               }
-                            });
+                            line += d.init.arguments.map(arg=>{
+                                if(isNumericLiteral(arg)) {
+                                    return arg.value ;
+                                }
+                                else if (isIdentifier(arg)){
+                                    return arg.name;
+                                }
+                                else if(isStringLiteral(arg)){
+                                    return  ("'"+arg.value+"'");
+                                }
+                                return ""
+                            }).join(",");
 
                             line += ")" ;
                         }
 
                     }
                     line += " ;" ;
-
-                    let pos = "" ;
-                    if(path.node.loc){
-                        pos += path.node.loc.start.line ;
-                        pos += ":"
-                        pos += ("["+path.node.loc.start.column+","+path.node.loc.end.column+"]")
-                    }
-                    console.log(filename,pos,line);
+                    console.log(filename,getPosition(path.node.loc),line);
                 })
 
-            }
+            },
+
+            CallExpression(path:NodePath<CallExpression>, state:PluginPass) {
+                const filename = state.filename?.replace(state.cwd + "/", "");
+                let line = "";
+                if(isIdentifier(path.node.callee)) {
+                    line += path.node.callee.name ;
+                }
+                line += "(" ;
+                line += path.node.arguments.map(arg=>{
+                    if(isNumericLiteral(arg)) {
+                        return arg.value ;
+                    }
+                    else if (isIdentifier(arg)){
+                        return arg.name;
+                    }
+                    else if(isStringLiteral(arg)){
+                        return  ("'"+arg.value+"'");
+                    }
+                    return ""
+                }).join(",");
+
+                line += ")" ;
+                console.log(filename, line)
+
+            },
+
         },
     };
 }
