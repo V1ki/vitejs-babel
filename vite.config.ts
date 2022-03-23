@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [
     react({
       babel: {
-        plugins: ['./babel/react'],
+        plugins: [
+            require('./babel/react')
+        ],
       },
     }),
   ],
