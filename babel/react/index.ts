@@ -1,14 +1,34 @@
 import {NodePath, PluginObj, PluginPass} from "@babel/core";
 import {
-    CallExpression, ExportDefaultDeclaration,
-    Identifier,
-    ImportDeclaration, isArrayPattern, isCallExpression, isIdentifier,
+    CallExpression,
+    ExportDefaultDeclaration,
+    ImportDeclaration,
+    isArrayExpression,
+    isArrayPattern, isArrowFunctionExpression, isBinaryExpression, isBindExpression, isBlockStatement,
+    isBooleanLiteral,
+    isCallExpression,
+    isIdentifier,
     isImportDefaultSpecifier,
-    isImportSpecifier, isNumericLiteral, isStringLiteral, SourceLocation,
+    isImportSpecifier, isJSXAttribute,
+    isJSXClosingElement,
+    isJSXElement, isJSXExpressionContainer,
+    isJSXIdentifier,
+    isJSXMemberExpression,
+    isJSXOpeningElement, isJSXText,
+    isMemberExpression,
+    isNumericLiteral,
+    isObjectExpression,
+    isObjectMethod,
+    isObjectProperty, isReturnStatement,
+    isStringLiteral,
+    isThisExpression,
+    isUnaryExpression,
+    ObjectExpression,
+    SourceLocation,
     VariableDeclaration
 } from "@babel/types";
 
-const getPosition: (loc: SourceLocation | null ) => String = (loc) => {
+const getPosition: (loc: SourceLocation | null ) => string = (loc) => {
     let pos = "" ;
     if(loc){
         pos += loc.start.line ;
@@ -16,6 +36,97 @@ const getPosition: (loc: SourceLocation | null ) => String = (loc) => {
         pos += ("["+loc.start.column+","+loc.end.column+"]")
     }
     return pos ;
+}
+const getExpressionStr: (node: any) => string = (node) => {
+    if(isIdentifier(node) || isJSXIdentifier(node)){
+        return node.name;
+    }
+    else if(isJSXClosingElement(node)){
+        return "</"+getExpressionStr(node.name)+">"
+    }
+    else if(isJSXElement(node)){
+        if(node.children.length > 0){
+            return "<" + getExpressionStr(node.openingElement) +">" + node.children.map(getExpressionStr).join(" ")+ getExpressionStr(node.closingElement) ;
+        }
+        else {
+            return "<" + getExpressionStr(node.openingElement) +"/>" ;
+        }
+    }
+    else if(isJSXOpeningElement(node)){
+        return getExpressionStr(node.name) +" "+ node.attributes.map(getExpressionStr).join(" ") ;
+    }
+    else if(isJSXAttribute(node)){
+        return getExpressionStr(node.name) + "="+ getExpressionStr(node.value) ;
+    }
+    else if(isJSXExpressionContainer(node)){
+        return "{"+ getExpressionStr(node.expression) +"}"
+    }
+    else if(isJSXText(node) || isNumericLiteral(node) || isBooleanLiteral(node)){
+        return node.value +"" ;
+    }
+    else if(isStringLiteral(node)){
+        return "'"+node.value+"'" ;
+    }
+    else if (isArrayExpression(node) || isArrayPattern(node)){
+        return "["+ node.elements.map(getExpressionStr).join(",")+"]" ;
+    }
+    else if(isUnaryExpression(node)) {
+        return node.operator + " " + getExpressionStr(node.argument);
+    }
+    else if(isBinaryExpression(node)) {
+        return getExpressionStr(node.left) + node.operator + getExpressionStr(node.right)
+    }
+    else if(isObjectExpression(node)) {
+        return getObjectExpressStr(node);
+    }
+    else if(isMemberExpression(node) || isJSXMemberExpression(node)){
+        return getExpressionStr(node.object) +"."+getExpressionStr(node.property);
+    }
+
+    else if(isCallExpression(node)) {
+        let line = getExpressionStr(node.callee) ;
+        line += "(" ;
+        line += node.arguments.map(getExpressionStr).join(",");
+        line += ")" ;
+        return line;
+    }
+    else if(isArrowFunctionExpression(node)) {
+        let line = "(" ;
+        line += node.params.map(getExpressionStr).join(",") ;
+        line += ")" ;
+        line += "=> " ;
+        line += getExpressionStr(node.body)
+        return line;
+    }
+    else if(isBlockStatement(node)){
+        return "{" + node.body.map(getExpressionStr).join(" ") +"; }"
+    }
+    else if(isReturnStatement(node)) {
+        return "return "+ getExpressionStr(node.argument);
+    }
+    else if(isThisExpression(node)){
+        return "this"
+    }
+    console.log(node)
+    return "" ;
+}
+
+
+const getObjectExpressStr: (obj: ObjectExpression) => string = (obj) => {
+    let line = "{";
+
+    line += obj.properties.map(p => {
+        if(isObjectProperty(p)){
+            return getExpressionStr(p.key)+":" +getExpressionStr(p.value)
+        }
+        else if(isObjectMethod(p)) {
+            return getExpressionStr(p.key) + ":" ;
+        }
+        return "" ;
+    }).join(",")
+
+    line+="}" ;
+    return line ;
 }
 
 
@@ -50,86 +161,32 @@ export default function testPluginFunction(): PluginObj {
                 }
                 str += ("'" + node.source.value + "'");
 
-                console.log(filename, getPosition(node.loc), str);
-                // console.log('ImportDeclaration Entered!', path.node);
-                // console.log("node.specifiers: ",node.specifiers )
-                // console.log("source: ",node.source.value)
-
+                console.log(filename,getPosition(node.loc), str);
             },
-            VariableDeclaration(path: NodePath<VariableDeclaration>, state: PluginPass) {
+            VariableDeclaration: function (path: NodePath<VariableDeclaration>, state: PluginPass) {
                 const declarations = path.node.declarations;
                 const filename = state.filename?.replace(state.cwd + "/", "");
+                let line = path.node.kind + " ";
                 declarations.forEach(d => {
-                    let line = path.node.kind;
-                    if (isArrayPattern(d.id)) {
-                        line += " [";
-                        line += d.id.elements.map(e => {
-                            return (e as Identifier).name;
-
-                        }).join(",")
-                        line += " ]";
-                    } else if (isIdentifier(d.id)) {
-                        line += " " + d.id.name;
-                    }
+                    line += getExpressionStr(d.id) ;
                     if (d.init) {
                         line += " = ";
-                        if (isStringLiteral(d.init)) {
-                            line += ("'" + d.init.value + "'");
-                        }
-                        else if(isCallExpression(d.init)) {
-                            if(isIdentifier(d.init.callee)){
-                                line += d.init.callee.name ;
-                            }
-                            line += "(" ;
-                            line += d.init.arguments.map(arg=>{
-                                if(isNumericLiteral(arg)) {
-                                    return arg.value ;
-                                }
-                                else if (isIdentifier(arg)){
-                                    return arg.name;
-                                }
-                                else if(isStringLiteral(arg)){
-                                    return  ("'"+arg.value+"'");
-                                }
-                                return ""
-                            }).join(",");
-
-                            line += ")" ;
-                        }
+                        line += getExpressionStr(d.init);
 
                     }
-                    line += " ;" ;
-                    console.log(filename,getPosition(path.node.loc),line);
+                    line += " ;";
                 })
+                console.log("", filename, getPosition(path.node.loc), line);
 
             },
 
             CallExpression(path:NodePath<CallExpression>, state:PluginPass) {
                 const filename = state.filename?.replace(state.cwd + "/", "");
-                let line = "";
-                if(isIdentifier(path.node.callee)) {
-                    line += path.node.callee.name ;
-                }
-                line += "(" ;
-                line += path.node.arguments.map(arg=>{
-                    if(isNumericLiteral(arg)) {
-                        return arg.value ;
-                    }
-                    else if (isIdentifier(arg)){
-                        return arg.name;
-                    }
-                    else if(isStringLiteral(arg)){
-                        return  ("'"+arg.value+"'");
-                    }
-                    return ""
-                }).join(",");
-
-                line += ")" ;
+                let line = getExpressionStr(path.node);
                 console.log(filename, line)
 
             },
             ExportDefaultDeclaration(path:NodePath<ExportDefaultDeclaration>, state:PluginPass){
-                console.log(path,state)
                 const filename = state.filename?.replace(state.cwd + "/", "");
                 let line = "export default " ;
                 if(isIdentifier(path.node.declaration)) {
