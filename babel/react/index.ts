@@ -37,6 +37,10 @@ const getPosition: (loc: SourceLocation | null ) => string = (loc) => {
     }
     return pos ;
 }
+const getFileName: (state: PluginPass) => string = (state) => {
+    return state.filename?.slice(state.cwd.length + 1) || "";
+}
+
 const getExpressionStr: (node: any) => string = (node) => {
     if(isIdentifier(node) || isJSXIdentifier(node)){
         return node.name;
@@ -134,8 +138,6 @@ export default function testPluginFunction(): PluginObj {
     return {
         visitor: {
             ImportDeclaration(path: NodePath<ImportDeclaration>, state: PluginPass) {
-                // console.log(path,state);
-                const filename = state.filename?.replace(state.cwd + "/", "");
                 const node = path.node;
                 let str = "import ";
                 const defaultSpecifiers = node.specifiers.filter(s => isImportDefaultSpecifier(s));
@@ -161,11 +163,10 @@ export default function testPluginFunction(): PluginObj {
                 }
                 str += ("'" + node.source.value + "'");
 
-                console.log(filename,getPosition(node.loc), str);
+                console.log(getFileName(state),getPosition(node.loc), str);
             },
             VariableDeclaration: function (path: NodePath<VariableDeclaration>, state: PluginPass) {
                 const declarations = path.node.declarations;
-                const filename = state.filename?.replace(state.cwd + "/", "");
                 let line = path.node.kind + " ";
                 declarations.forEach(d => {
                     line += getExpressionStr(d.id) ;
@@ -176,23 +177,21 @@ export default function testPluginFunction(): PluginObj {
                     }
                     line += " ;";
                 })
-                console.log("", filename, getPosition(path.node.loc), line);
+                console.log(getFileName(state), getPosition(path.node.loc), line);
 
             },
 
             CallExpression(path:NodePath<CallExpression>, state:PluginPass) {
-                const filename = state.filename?.replace(state.cwd + "/", "");
                 let line = getExpressionStr(path.node);
-                console.log(filename, line)
+                console.log(getFileName(state), line)
 
             },
             ExportDefaultDeclaration(path:NodePath<ExportDefaultDeclaration>, state:PluginPass){
-                const filename = state.filename?.replace(state.cwd + "/", "");
                 let line = "export default " ;
                 if(isIdentifier(path.node.declaration)) {
                     line += path.node.declaration.name ;
                 }
-                console.log(filename,getPosition(path.node.loc), line)
+                console.log(getFileName(state),getPosition(path.node.loc), line)
             },
         },
     };
