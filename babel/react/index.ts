@@ -13,19 +13,19 @@ import {
     isBooleanLiteral, isBreakStatement,
     isCallExpression,
     isConditionalExpression,
-    isExpressionStatement,
+    isExpressionStatement, isFunctionDeclaration,
     isFunctionExpression,
     isIdentifier,
-    isIfStatement,
+    isIfStatement, isImport,
     isImportDefaultSpecifier,
     isImportSpecifier,
     isJSXAttribute,
-    isJSXClosingElement,
-    isJSXElement,
-    isJSXExpressionContainer,
+    isJSXClosingElement, isJSXClosingFragment,
+    isJSXElement, isJSXEmptyExpression,
+    isJSXExpressionContainer, isJSXFragment,
     isJSXIdentifier,
     isJSXMemberExpression,
-    isJSXOpeningElement,
+    isJSXOpeningElement, isJSXOpeningFragment, isJSXSpreadAttribute,
     isJSXText,
     isLogicalExpression,
     isMemberExpression,
@@ -34,16 +34,16 @@ import {
     isNumericLiteral,
     isObjectExpression,
     isObjectPattern,
-    isObjectProperty, isOptionalMemberExpression, isRestElement,
+    isObjectProperty, isOptionalCallExpression, isOptionalMemberExpression, isRegExpLiteral, isRestElement,
     isReturnStatement, isSequenceExpression, isSpreadElement,
     isStringLiteral, isSwitchCase, isSwitchStatement,
     isTemplateElement,
     isTemplateLiteral,
     isThisExpression, isThrowStatement, isTryStatement,
-    isTSAnyKeyword,
-    isTSAsExpression,
-    isTSNonNullExpression,
-    isTSTupleType, isTSTypeOperator, isTSTypeQuery,
+    isTSAnyKeyword, isTSArrayType,
+    isTSAsExpression, isTSIndexedAccessType, isTSLiteralType,
+    isTSNonNullExpression, isTSStringKeyword,
+    isTSTupleType, isTSTypeOperator, isTSTypeQuery, isTSTypeReference, isTSUnionType,
     isUnaryExpression,
     isVariableDeclaration,
     isVariableDeclarator, isWhileStatement, isYieldExpression,
@@ -51,14 +51,14 @@ import {
     VariableDeclaration
 } from "@babel/types";
 
-const getPosition: (loc: SourceLocation | null ) => string = (loc) => {
-    let pos = "" ;
-    if(loc){
-        pos += loc.start.line ;
+const getPosition: (loc: SourceLocation | null) => string = (loc) => {
+    let pos = "";
+    if (loc) {
+        pos += loc.start.line;
         pos += ":"
-        pos += ("["+loc.start.column+","+loc.end.column+"]")
+        pos += ("[" + loc.start.column + "," + loc.end.column + "]")
     }
-    return pos ;
+    return pos;
 }
 const getFileName: (state: PluginPass) => string = (state) => {
     return state.filename?.slice(state.cwd.length + 1) || "";
@@ -134,68 +134,82 @@ const getExpressionStr: (node: any) => string = (node) => {
         return node.properties.map(getExpressionStr).join(",");
     } else if (isObjectProperty(node)) {
         return getExpressionStr(node.key) + ":" + getExpressionStr(node.value)
-    }
-    else if (isNewExpression(node)) {
+    } else if (isNewExpression(node)) {
         return "new " + getExpressionStr(node.callee) + "(" + node.arguments.map(getExpressionStr).join(",") + ")";
-    }
-    else if(isNullLiteral(node)){
+    } else if (isNullLiteral(node)) {
         return "null";
-    }
-    else if(isFunctionExpression(node)) {
+    } else if (isFunctionExpression(node)) {
         return "function " + getExpressionStr(node.id) + "(" + node.params.map(getExpressionStr).join(",") + "){" + getExpressionStr(node.body) + "}";
-    }
-    else if(isTSNonNullExpression(node)) {
+    } else if (isTSNonNullExpression(node)) {
         return getExpressionStr(node.expression) + "!";
-    }
-    else if(isTSAsExpression(node)) {
+    } else if (isTSAsExpression(node)) {
         return getExpressionStr(node.expression) + " as " + getExpressionStr(node.typeAnnotation);
-    }
-    else if(isTSAnyKeyword(node)) {
+    } else if (isTSAnyKeyword(node)) {
         return "any";
-    }
-    else if(isTSTupleType(node)) {
+    } else if (isTSTupleType(node)) {
         return "(" + node.elementTypes.map(getExpressionStr).join(",") + ")";
-    }
-    else if(isTSTypeOperator(node)) {
+    } else if (isTSTypeOperator(node)) {
         return getExpressionStr(node.typeAnnotation) + node.operator;
-    }
-    else if (isTSTypeQuery(node)) {
+    } else if (isTSTypeQuery(node)) {
         return getExpressionStr(node.exprName);
-    }
-    else if(isTryStatement(node)){
+    } else if (isTryStatement(node)) {
         return "try{" + getExpressionStr(node.block) + "}" +
             (node.handler ? "catch(" + getExpressionStr(node.handler.param) + "){" + getExpressionStr(node.handler.body) + "}" : "")
-            +(node.finalizer ? "finally{" + getExpressionStr(node.finalizer) + "}" : "");
-    }
-    else if(isOptionalMemberExpression(node)){
+            + (node.finalizer ? "finally{" + getExpressionStr(node.finalizer) + "}" : "");
+    } else if (isOptionalMemberExpression(node)) {
         return getExpressionStr(node.object) + "?" + getExpressionStr(node.property);
-    }
-    else if(isRestElement(node) || isSpreadElement(node)) {
+    } else if (isRestElement(node) || isSpreadElement(node)) {
         return "..." + getExpressionStr(node.argument);
-    }
-    else if(isThrowStatement(node)) {
+    } else if (isThrowStatement(node)) {
         return "throw " + getExpressionStr(node.argument);
-    }
-    else if(isSwitchStatement(node)) {
+    } else if (isSwitchStatement(node)) {
         return "switch(" + getExpressionStr(node.discriminant) + "){" + node.cases.map(getExpressionStr).join("") + "}";
-    }
-    else if(isSwitchCase(node)) {
+    } else if (isSwitchCase(node)) {
         return "case " + getExpressionStr(node.test) + ":" + node.consequent.map(getExpressionStr).join("");
-    }
-    else if(isBreakStatement(node)) {
+    } else if (isBreakStatement(node)) {
         return "break";
-    }
-    else if(isAwaitExpression(node)) {
+    } else if (isAwaitExpression(node)) {
         return "await " + getExpressionStr(node.argument);
-    }
-    else if(isYieldExpression(node)) {
+    } else if (isYieldExpression(node)) {
         return "yield " + getExpressionStr(node.argument);
-    }
-    else if(isWhileStatement(node)) {
+    } else if (isWhileStatement(node)) {
         return "while(" + getExpressionStr(node.test) + ")" + getExpressionStr(node.body);
-    }
-    else if(isSequenceExpression(node)) {
+    } else if (isSequenceExpression(node)) {
         return node.expressions.map(getExpressionStr).join(";");
+    } else if (isTSTypeReference(node)) {
+        return getExpressionStr(node.typeName);
+    } else if (isFunctionDeclaration(node)) {
+        return "function " + getExpressionStr(node.id) + "(" + node.params.map(getExpressionStr).join(",") + "){" + getExpressionStr(node.body) + "}";
+    } else if (isImport(node)) {
+        return "import";
+    } else if (isOptionalCallExpression(node)) {
+        return getExpressionStr(node.callee) + "?.(" + node.arguments.map(getExpressionStr).join(",") + ")";
+    } else if (isRegExpLiteral(node)) {
+        return "`" + node.pattern + "`";
+    } else if (isJSXFragment(node)) {
+        if (node.children.length > 0) {
+            return "<" + getExpressionStr(node.openingFragment) + ">" + node.children.map(getExpressionStr).join(" ") + getExpressionStr(node.closingFragment);
+        } else {
+            return "<" + getExpressionStr(node.openingFragment) + "/>";
+        }
+    } else if (isJSXOpeningFragment(node)) {
+        return "<>";
+    } else if (isJSXClosingFragment(node)) {
+        return "</>";
+    } else if (isJSXSpreadAttribute(node)) {
+        return "..." + getExpressionStr(node.argument);
+    } else if (isTSArrayType(node)) {
+        return getExpressionStr(node.elementType) + "[]";
+    } else if (isTSIndexedAccessType(node)) {
+        return getExpressionStr(node.objectType) + "[" + getExpressionStr(node.indexType) + "]";
+    } else if (isTSLiteralType(node)) {
+        return getExpressionStr(node.literal);
+    } else if (isTSUnionType(node)) {
+        return node.types.map(getExpressionStr).join("|");
+    } else if (isTSStringKeyword(node)) {
+        return "string";
+    } else if (isJSXEmptyExpression(node)) {
+        return "";
     }
 
     console.log(node)
@@ -231,24 +245,24 @@ function testPluginFunction(): PluginObj {
                 }
                 str += ("'" + node.source.value + "'");
 
-                console.log(getFileName(state),getPosition(node.loc), str);
+                console.log(getFileName(state), getPosition(node.loc), str);
             },
             VariableDeclaration: function (path: NodePath<VariableDeclaration>, state: PluginPass) {
                 console.log(getFileName(state), getPosition(path.node.loc), getExpressionStr(path.node));
             },
 
-            CallExpression(path:NodePath<CallExpression>, state:PluginPass) {
+            CallExpression(path: NodePath<CallExpression>, state: PluginPass) {
                 console.log(getFileName(state), getPosition(path.node.loc), getExpressionStr(path.node));
             },
-            ExportDefaultDeclaration(path:NodePath<ExportDefaultDeclaration>, state:PluginPass){
-                let line = "export default " ;
-                if(isIdentifier(path.node.declaration)) {
-                    line += path.node.declaration.name ;
+            ExportDefaultDeclaration(path: NodePath<ExportDefaultDeclaration>, state: PluginPass) {
+                let line = "export default ";
+                if (isIdentifier(path.node.declaration)) {
+                    line += path.node.declaration.name;
                 }
-                console.log(getFileName(state),getPosition(path.node.loc), line)
+                console.log(getFileName(state), getPosition(path.node.loc), line)
             },
         },
     };
 }
 
-module.exports = testPluginFunction ;
+module.exports = testPluginFunction;
