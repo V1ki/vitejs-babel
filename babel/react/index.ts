@@ -4,7 +4,7 @@ import {
     ExportDefaultDeclaration,
     ImportDeclaration,
     isArrayExpression,
-    isArrayPattern, isArrowFunctionExpression, isBinaryExpression, isBindExpression, isBlockStatement,
+    isArrayPattern, isArrowFunctionExpression, isBinaryExpression, isBlockStatement,
     isBooleanLiteral,
     isCallExpression,
     isIdentifier,
@@ -134,7 +134,7 @@ const getObjectExpressStr: (obj: ObjectExpression) => string = (obj) => {
 }
 
 
-export default function testPluginFunction(): PluginObj {
+function testPluginFunction(): PluginObj {
     return {
         visitor: {
             ImportDeclaration(path: NodePath<ImportDeclaration>, state: PluginPass) {
@@ -197,3 +197,4 @@ export default function testPluginFunction(): PluginObj {
     };
 }
 
+module.exports = testPluginFunction ;
